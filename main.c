@@ -2,7 +2,7 @@
 #include "param.h"
 
 /* A <- A + lambda B */
-void mygsl_matrix_addscale(gsl_matrix *A, double lambda , gsl_matrix *B) {
+void matrix_addscale(gsl_matrix *A, double lambda , gsl_matrix *B) {
     for (size_t i = 0; i < SIZE; i++)
         for (size_t j = 0; i < SIZE; i++)
             gsl_matrix_set(A, i, j, lambda * gsl_matrix_get(B, i, j));
@@ -12,7 +12,7 @@ void m2(double t, double h, space *S) {
     double t_bar = t + h/2;
     double v_bar = v(t_bar);
     gsl_matrix_memcpy(S->Omega2, S->H0);    /* H0 */
-    mygsl_matrix_addscale(S->Omega2, v_bar, S->W);   /* H0 + vbar W */
+    matrix_addscale(S->Omega2, v_bar, S->W);   /* H0 + vbar W */
 }
 
 void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3) {
@@ -47,6 +47,15 @@ void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_comp
     }
 }
 
+gsl_complex exp1(double x, double t) {
+    return gsl_complex_div_real(
+             gsl_complex_sub(
+               gsl_complex_polar(1.0, x*t), COMPLEX_1
+             ),
+             x
+           );
+}
+
 /* expA <- exp(tA) */
 void matrix_exp_vec(gsl_matrix *A, double t, space *S) {
     double q, p, tr3;
@@ -62,4 +71,33 @@ void matrix_exp_vec(gsl_matrix *A, double t, space *S) {
 
     realmatrix_complexvec(A, S->psi, S->Apsi);
     realmatrix_complexvec(A, S->Apsi, S->AApsi);
+
+    gsl_complex r0, r1;
+    r0 = exp1(a, t);
+    r1 = gsl_complex_div_real(
+           gsl_complex_sub(
+             exp1(a, t), exp1(b, t)
+           ),
+           a-b
+         );
+
+    gsl_vector_complex_scale(S->psi,
+        gsl_complex_sub(COMPLEX_1,
+            gsl_complex_mul_real(
+                gsl_complex_sub(r0, gsl_complex_mul_real(r1, l1)),
+                l0
+            )
+        )
+    );
+    gsl_vector_complex_scale(S->Apsi,
+        gsl_complex_add(r0, gsl_complex_mul_real(r1, l2))
+    );
+    gsl_vector_complex_scale(S->AApsi, r1);
+
+    gsl_vector_complex_add(S->psi, S->Apsi);
+    gsl_vector_complex_add(S->psi, S->AApsi);
+
+    gsl_vector_complex_scale(S->psi,
+        gsl_complex_polar(1.0, (tr3 + l0) * t)
+    );
 }

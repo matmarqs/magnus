@@ -20,3 +20,4 @@ typedef struct {
 #define VSET(V, i, x)   gsl_vector_complex_set((V), (i), (x))
 #define MGET(M, i, j)   gsl_matrix_get((M), (i), (j))
 #define SIZE 3
+#define COMPLEX_1       gsl_complex_rect(1.0, 0.0)

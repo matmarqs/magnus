@@ -1,7 +1,9 @@
+/* standard libraries */
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 
+/* GSL */
 #include <gsl/gsl_complex.h>        /* definition of complex numbers */
 #include <gsl/gsl_complex_math.h>   /* complex math operations */
 #include <gsl/gsl_vector.h>         /* vector definitions */
@@ -9,6 +11,7 @@
 #include <gsl/gsl_blas.h>           /* basic linear algebra operations */
 #include <gsl/gsl_linalg.h>         /* linear algebra */
 #include <gsl/gsl_spline.h>         /* interpolation of real data */
+#include <gsl/gsl_poly.h>           /* find cubic roots */
 
 /* macros */
 #define DIM 3
@@ -32,18 +35,19 @@ typedef struct {
     double *a, *b;
 } Space;
 
+
 /* DEFINITIONS */
-void setH0(Space *S, double E);
-void free_space(Space *space);
 Space *init_space(double *x, double *Ne, int N);
-int readalloc(FILE *stream, double **x_ptr, double **y_ptr, int chunk);
-double surv(gsl_vector_complex *psi);
-double norm(gsl_vector_complex *psi);
-void matrix_exp_vec(gsl_matrix *A, double t, Space *S);
-gsl_complex exp1(double x, double t);
-void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y);
-void order3(double *l0, double *l1, double *l2);
-void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3);
+void free_space(Space *space);
+void setH0(Space *S, double E);
 void m2(double t, double h, Space *space);
+void expi_matrix_vec(gsl_matrix *A, double t, Space *S);
+void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3);
+gsl_complex exp1i(double x, double t);
+void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y);
 double v(double t, void *interpo);
 void sqrt2_GF_NA(double *Ne, int N);
+double surv(gsl_vector_complex *psi);
+double norm(gsl_vector_complex *psi);
+int readalloc(FILE *stream, double **x_ptr, double **y_ptr, int chunk);
+void print_matrix(gsl_matrix *M, size_t dim);

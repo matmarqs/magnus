@@ -4,7 +4,7 @@
 /* DEFINITIONS */
 
 int main(int argc, char *argv[]) {
-//
+
                             /*************************/
                             /***   READING DATA    ***/
                             /*************************/
@@ -13,14 +13,13 @@ int main(int argc, char *argv[]) {
     FILE *distr_file = fopen("8b-distr.txt", "r");
     double *x, *Ne;
     int N = readalloc(elecdens_file, &x, &Ne, 2500); /* we have 2458 lines */
-    sqrt2_GF_NA(Ne, N);
     double *E, *p_E;
     double *r0, *p_r0;
     /*int num_E = */readalloc(energy_file, &E, &p_E, 900);   /* 844 lines */
     /*int num_r = */readalloc(distr_file, &r0, &p_r0, 1300); /* 1226 lines */
     fclose(elecdens_file); fclose(energy_file); fclose(distr_file);
-//
-//
+
+
                             /*************************/
                             /***   INITIALIZING    ***/
                             /*************************/
@@ -28,10 +27,10 @@ int main(int argc, char *argv[]) {
     Space *space = init_space(x, Ne, N);
 
     /* declaring */
-    double t0, ti;
-    char *format = "%15.5e%15.5e%15.5e%15.5e\n";
-//
-//
+    double t0 = T_0, ti;
+    //char *format = "%15.5e%15.5e%15.5e%15.5e\n";
+
+
                             /*************************/
                             /***        ODE        ***/
                             /*************************/
@@ -41,18 +40,20 @@ int main(int argc, char *argv[]) {
     setH0(space, energy);
     for (long i = 0; i <= num_it; i++) {
         ti = i * PASSO + t0;    /* constant step size (variable will be implemented) */
-        matrix_exp_vec(space->Omega2, ti, space);   /* M2 matrix */
         printf("%*ld%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e\n", it_width,
                 i, ti,
                 GSL_REAL(VGET(space->psi, 0)), GSL_IMAG(VGET(space->psi, 0)),   /* psi_1 */
                 GSL_REAL(VGET(space->psi, 1)), GSL_IMAG(VGET(space->psi, 1)),   /* psi_2 */
                 GSL_REAL(VGET(space->psi, 2)), GSL_IMAG(VGET(space->psi, 2)),   /* psi_3 */
                 gsl_blas_dznrm2(space->psi));   /* norm of psi */
+        m2(ti, PASSO, space);   /* Magnus 2 */
+        expi_matrix_vec(space->Omega2, -PASSO, space);   /* psi <- exp(-i Omega2 h) psi */
     }
+    printf("energy = %.5e\n", energy);
     /* this printf below is for the survival probability */
     //printf(format, t0, energy, surv(space->psi), gsl_blas_dznrm2(space->psi));
-//
-//
+
+
                             /*************************/
                             /*   FREEING RESOURCES   */
                             /*************************/
@@ -62,7 +63,8 @@ int main(int argc, char *argv[]) {
     free(x); free(Ne);
     free(E); free(p_E);
     free(r0); free(p_r0);
-//
+    return 0;
+
 }
 
 
@@ -72,21 +74,25 @@ Space *init_space(double *x, double *Ne, int N) {
     Space *space = malloc(sizeof(Space));
     space->interp = malloc(sizeof(interpol));
     space->interp->acc = gsl_interp_accel_alloc();
+    /* scaling and interpolating data */
     space->interp->spline = gsl_spline_alloc(gsl_interp_steffen, N);  /* STEFFEN */
+    sqrt2_GF_NA(Ne, N);
     gsl_spline_init(space->interp->spline, x, Ne, N);
     /* defining the parameters */
     double th12 = DEG_TO_RAD(THETA12),
-           th23, th13;// double d_CP;
+           //th23,
+           //d_CP,
+           th13;
     /* checking number of neutrinos and setting parameters accordingly */
     if (NUM_NU == 2) {
-        th23 = th13 = 0.0;// d_CP = 0.0;
+        th13 /*= th23 = d_CP*/ = 0.0;
     }
     else {
-        th23 = DEG_TO_RAD(THETA23); th13 = DEG_TO_RAD(THETA13);// d_CP = DEG_TO_RAD(DELTACP);
+        th13 = DEG_TO_RAD(THETA13);// th23 = DEG_TO_RAD(THETA23); d_CP = DEG_TO_RAD(DELTACP);
     }
     /* calculating mixing matrix */
     double s12 = sin(th12), c12 = cos(th12),
-           s23 = sin(th23), c23 = cos(th23),
+           //s23 = sin(th23), c23 = cos(th23),
            s13 = sin(th13), c13 = cos(th13);
     double
     W11=c13*c13*c12*c12,  W12=c12*s12*c13*c13,  W13=c12*c13*s13,
@@ -106,8 +112,8 @@ Space *init_space(double *x, double *Ne, int N) {
     space->H0 = H0;
     space->Omega2 = gsl_matrix_alloc(DIM, DIM);
     space->Omega4 = gsl_matrix_alloc(DIM, DIM);
-    space->psi = gsl_vector_complex_alloc(DIM);
     /* setting electron neutrino initial state */
+    space->psi = gsl_vector_complex_alloc(DIM);
     VSET(space->psi, 0, gsl_complex_rect(c12*c13, 0.0));
     VSET(space->psi, 1, gsl_complex_rect(s12*c13, 0.0));
     VSET(space->psi, 2, gsl_complex_rect(s13, 0.0));
@@ -145,25 +151,21 @@ void setH0(Space *S, double E) {
 
 /* Omega2 matrix for Magnus Expansion of order 2 */
 void m2(double t, double h, Space *space) {
-    double v_bar = v(t + h/2, space);   /* exponential midpoint rule */
+    double v_bar = v(t + h/2, space->interp);   /* exponential midpoint rule */
     gsl_matrix_memcpy(space->Omega2, space->W); /* W */
     gsl_matrix_scale(space->Omega2, v_bar);     /* v_bar W */
     gsl_matrix_add(space->Omega2, space->H0);   /* H0 + vbar W */
 }
 
 
-/* expA <- exp(tA) */
-void matrix_exp_vec(gsl_matrix *A, double t, Space *S) {
+/* expA <- exp(i t A) */
+void expi_matrix_vec(gsl_matrix *A, double t, Space *S) {
     /* calculating base parameters q, p and tr3 */
     double q, p, tr3;
     get_qptr3(A, &q, &p, &tr3);
     /* eigenvalues of matrix A */
-    int sign = (q > 0) ? (-1) : (1);
-    double l0 = sign*2*sqrt(p/3.0)*cos((acos(q*sqrt(0.75/p)))/3.0);
-    double l1 = sign*2*sqrt(p/3.0)*cos((acos(q*sqrt(0.75/p)))/3.0 - 2.0*M_PI/3.0);
-    double l2 = sign*2*sqrt(p/3.0)*cos((acos(q*sqrt(0.75/p)))/3.0 - 4.0*M_PI/3.0);
-    /* ordering l0 < l1 < l2 */
-    order3(&l0, &l1, &l2);
+    double l0, l1, l2;
+    gsl_poly_solve_cubic(0.0, -p, q, &l0, &l1, &l2);
     /* eigenvalues differences */
     double a = l1 - l0;
     double b = l2 - l0;
@@ -176,10 +178,10 @@ void matrix_exp_vec(gsl_matrix *A, double t, Space *S) {
     realmatrix_complexvec(A, S->Apsi, S->AApsi);
     /* parameters r0 and r1 */
     gsl_complex r0, r1;
-    r0 = exp1(a, t);
+    r0 = exp1i(a, t);
     r1 = gsl_complex_div_real(
            gsl_complex_sub(
-             exp1(a, t), exp1(b, t)
+             exp1i(a, t), exp1i(b, t)
            ),
            a-b
          );
@@ -221,9 +223,9 @@ void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3) {
 
 
 /*               exp(i x t) - 1  */
-/*  exp1(x, t) = --------------  */
+/*  exp1i(x, t) = --------------  */
 /*                      x        */
-gsl_complex exp1(double x, double t) {
+gsl_complex exp1i(double x, double t) {
     return gsl_complex_div_real(
                gsl_complex_sub(
                    gsl_complex_polar(1.0, x*t), GSL_COMPLEX_ONE
@@ -238,21 +240,9 @@ void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_comp
     size_t i, j;
     for (i = 0; i < DIM; i++) {
         VSET(y, i, gsl_complex_mul_real(VGET(x, 0), MGET(A, i, 0)));
-        for (size_t j = 1; j < 3; j++)
+        for (j = 1; j < 3; j++)
             VSET(y, i, gsl_complex_add(VGET(y, i), gsl_complex_mul_real(VGET(x, j), MGET(A, i, j))));
     }
-}
-
-
-/* order 3 numbers l0 < l1 < l2 */
-void order3(double *l0, double *l1, double *l2) {
-    double a;
-    if (*l0 > *l1)
-        a = *l0, *l0 = *l1, *l1 = a;
-    if (*l0 > *l2)
-        a = *l0, *l0 = *l2, *l2 = a;
-    if (*l1 > *l2)
-        a = *l1, *l1 = *l2, *l2 = a;
 }
 
 
@@ -266,19 +256,19 @@ double v(double t, void *interpo) {  /* void pointer because this defines a gsl_
 /* multiply our N_e data by sqrt(2) . G_F */
 void sqrt2_GF_NA(double *Ne, int N) {
     for (int i = 0; i < N; i++)
-        Ne[i] *= M_SQRT2 * G_F * N_A;
-}
-
-
-/* check if norm = 1, only for debugging */
-double norm(gsl_vector_complex *psi) {
-    return gsl_blas_dznrm2(psi);
+        Ne[i] *= M_SQRT2 * G_FxN_A;
 }
 
 
 /* survival probability of the electron neutrino */
 double surv(gsl_vector_complex *psi) {
     return gsl_complex_abs2(VGET(psi, 1));
+}
+
+
+/* check if norm = 1, only for debugging */
+double norm(gsl_vector_complex *psi) {
+    return gsl_blas_dznrm2(psi);
 }
 
 
@@ -309,4 +299,13 @@ int readalloc(FILE *stream, double **x_ptr, double **y_ptr, int chunk) {
     /* freeing resources */
     free(line);
     return N;
+}
+
+
+/* print matrix for debuggig */
+void print_matrix(gsl_matrix *M, size_t dim) {
+    for (size_t i = 0; i < dim; i++)  /* OUT OF RANGE ERROR */
+        for (size_t j = 0; j < dim; j++)
+            printf("%e%c", gsl_matrix_get(M, i, j),
+                  (j == dim-1) ? '\n' : ' ');
 }

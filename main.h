@@ -11,7 +11,7 @@
 #include <gsl/gsl_spline.h>         /* interpolation of real data */
 
 /* macros */
-#define SIZE 3
+#define DIM 3
 #define VGET(V, i)          gsl_vector_complex_get((V), (i))
 #define VSET(V, i, x)       gsl_vector_complex_set((V), (i), (x))
 #define MGET(M, i, j)       gsl_matrix_get((M), (i), (j))
@@ -29,9 +29,11 @@ typedef struct {
     gsl_matrix *Omega2, *Omega4;
     gsl_vector_complex *psi, *Apsi, *AApsi;
     interpol *interp;
+    double *a, *b;
 } Space;
 
 /* DEFINITIONS */
+void setH0(Space *S, double E);
 void free_space(Space *space);
 Space *init_space(double *x, double *Ne, int N);
 int readalloc(FILE *stream, double **x_ptr, double **y_ptr, int chunk);

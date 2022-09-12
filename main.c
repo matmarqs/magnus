@@ -1,6 +1,8 @@
 #include "main.h"
 #include "param.h"
 
+/* TODO: expi_matrix_vec nao conserva norma do vetor */
+
 /* DEFINITIONS */
 
 int main(int argc, char *argv[]) {
@@ -38,7 +40,7 @@ int main(int argc, char *argv[]) {
     int it_width = (int) log10(num_it) + 1;   /* variable to format and print things */
     double energy = 6.44;    /* energia mais provavel em MeV */
     setH0(space, energy);
-    for (long i = 0; i <= num_it; i++) {
+    for (long i = 0; i <= 2; i++) {
         ti = i * PASSO + t0;    /* constant step size (variable will be implemented) */
         printf("%*ld%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e\n", it_width,
                 i, ti,
@@ -160,20 +162,23 @@ void m2(double t, double h, Space *space) {
 
 /* expA <- exp(i t A) */
 void expi_matrix_vec(gsl_matrix *A, double t, Space *S) {
-    /* calculating base parameters q, p and tr3 */
-    double q, p, tr3;
-    get_qptr3(A, &q, &p, &tr3);
+    /* tr3 = tr(A)/3 */
+    double tr3 = (MGET(A,0,0) + MGET(A,1,1) + MGET(A,2,2))/3.0;
+    /* making A traceless */
+    MSET(A, 0, 0, MGET(A, 0, 0) - tr3);
+    MSET(A, 1, 1, MGET(A, 1, 1) - tr3);
+    MSET(A, 2, 2, MGET(A, 2, 2) - tr3);
+    /* calculating base parameters q, p */
+    double q, p;
+    get_qp(A, &q, &p);
     /* eigenvalues of matrix A */
     double l0, l1, l2;
     gsl_poly_solve_cubic(0.0, -p, q, &l0, &l1, &l2);
+    //printf("l0, l1, l2 = %e, %e, %e\n", l0, l1, l2);
     if (!(l0 == l1 && l0 == l2)) {
         /* eigenvalues differences */
         double a = l1 - l0;
         double b = l2 - l0;
-        /* making A traceless */
-        MSET(A, 0, 0, MGET(A, 0, 0) - tr3);
-        MSET(A, 1, 1, MGET(A, 1, 1) - tr3);
-        MSET(A, 2, 2, MGET(A, 2, 2) - tr3);
         /* calculating A.psi and A^2.psi */
         realmatrix_complexvec(A, S->psi, S->Apsi);
         realmatrix_complexvec(A, S->Apsi, S->AApsi);
@@ -218,7 +223,7 @@ void expi_matrix_vec(gsl_matrix *A, double t, Space *S) {
 
 
 /* calculating q, p and tr3 parameters to exponentiate a matrix */
-void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3) {
+void get_qp(gsl_matrix *A, double *q, double *p) {
     /* q = det(A) */
     *q = MGET(A,0,0) * ( MGET(A,1,1)*MGET(A,2,2) - MGET(A,1,2)*MGET(A,2,1) )
        - MGET(A,0,1) * ( MGET(A,1,0)*MGET(A,2,2) - MGET(A,1,2)*MGET(A,2,0) )
@@ -226,8 +231,6 @@ void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3) {
     /* p = tr(A^2)/2 */
     *p = (MGET(A,0,0) * MGET(A,0,0) + MGET(A,1,1) * MGET(A,1,1) + MGET(A,2,2) * MGET(A,2,2))/2.0
        +  MGET(A,0,1) * MGET(A,1,0) + MGET(A,1,2) * MGET(A,2,1) + MGET(A,2,0) * MGET(A,0,2);
-    /* tr3 = tr(A)/3 */
-    *tr3 = (MGET(A,0,0) + MGET(A,1,1) + MGET(A,2,2))/3.0;
 }
 
 

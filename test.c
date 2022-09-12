@@ -59,11 +59,11 @@ typedef struct {
 
 
 /* DEFINITIONS */
+void get_qp(gsl_matrix *A, double *q, double *p);
 void free_space(Space *space);
 void sqrt2_GF_NA(double *Ne, int N);
 Space *init_space(double *x, double *Ne, int N);
 gsl_complex exp1i(double x, double t);
-void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3);
 void expi_matrix_vec(gsl_matrix *A, double t, Space *S);
 void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y);
 void print_matrix(gsl_matrix *M, size_t dim);
@@ -77,23 +77,25 @@ int main() {
     }
     Space *space = init_space(x, Ne, 5);
     gsl_vector_complex *psi = space->psi;
-    gsl_vector_complex_set(psi, 0, gsl_complex_rect(1.0, 0.0));
-    gsl_vector_complex_set(psi, 1, gsl_complex_rect(2.0, 0.0));
-    gsl_vector_complex_set(psi, 2, gsl_complex_rect(3.0, 0.0));
+    gsl_vector_complex_set(psi, 0, gsl_complex_rect(1/sqrt(2), 0.0));
+    gsl_vector_complex_set(psi, 1, gsl_complex_rect(1/sqrt(3), 0.0));
+    gsl_vector_complex_set(psi, 2, gsl_complex_rect(1/sqrt(6), 0.0));
+    printf("norm(psi) = %e\n\n", gsl_blas_dznrm2(psi));
     gsl_matrix *A = space->Omega2;
     gsl_matrix_set_zero(A);
-    gsl_matrix_set(A, 0, 0, 1.0);
-    gsl_matrix_set(A, 1, 1, 1.0);
-    gsl_matrix_set(A, 2, 2, 1.0);
+    MSET(A, 0, 0, 1.0);    MSET(A, 0, 1, -2.0); MSET(A, 0, 2, 1.0);
+    MSET(A, 1, 0, -2.0); MSET(A, 1, 1, 2.0);    MSET(A, 1, 2, -2.0);
+    MSET(A, 2, 0, 1.0);   MSET(A, 2, 1, -2.0);   MSET(A, 2, 2, 4.0);
+    printf("A =\n");
     print_matrix(A, DIM);
+    //printf("\n");
+    //print_vec(psi, DIM);
+    expi_matrix_vec(A, 100.0, space);
+    //print_matrix(A, DIM);
     printf("\n");
-    print_vec(psi, DIM);
-    printf("\n");
-    expi_matrix_vec(A, 5.0, space);
-    print_matrix(A, DIM);
-    printf("\n");
-    printf("exp(i A t) psi =\n\n");
-    print_vec(psi, DIM);
+    printf("norm[exp(i A t) psi] = %e\n\n", gsl_blas_dznrm2(psi));
+    //printf("exp(i A t) psi =\n\n");
+    //print_vec(psi, DIM);
     free_space(space);
     free(x); free(Ne);
     return 0;
@@ -132,9 +134,15 @@ void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_comp
 
 /* expA <- exp(i t A) */
 void expi_matrix_vec(gsl_matrix *A, double t, Space *S) {
-    /* calculating base parameters q, p and tr3 */
-    double q, p, tr3;
-    get_qptr3(A, &q, &p, &tr3);
+    /* tr3 = tr(A)/3 */
+    double tr3 = (MGET(A,0,0) + MGET(A,1,1) + MGET(A,2,2))/3.0;
+    /* making A traceless */
+    MSET(A, 0, 0, MGET(A, 0, 0) - tr3);
+    MSET(A, 1, 1, MGET(A, 1, 1) - tr3);
+    MSET(A, 2, 2, MGET(A, 2, 2) - tr3);
+    /* calculating base parameters q, p */
+    double q, p;
+    get_qp(A, &q, &p);
     /* eigenvalues of matrix A */
     double l0, l1, l2;
     gsl_poly_solve_cubic(0.0, -p, q, &l0, &l1, &l2);
@@ -142,10 +150,6 @@ void expi_matrix_vec(gsl_matrix *A, double t, Space *S) {
         /* eigenvalues differences */
         double a = l1 - l0;
         double b = l2 - l0;
-        /* making A traceless */
-        MSET(A, 0, 0, MGET(A, 0, 0) - tr3);
-        MSET(A, 1, 1, MGET(A, 1, 1) - tr3);
-        MSET(A, 2, 2, MGET(A, 2, 2) - tr3);
         /* calculating A.psi and A^2.psi */
         realmatrix_complexvec(A, S->psi, S->Apsi);
         realmatrix_complexvec(A, S->Apsi, S->AApsi);
@@ -190,7 +194,7 @@ void expi_matrix_vec(gsl_matrix *A, double t, Space *S) {
 
 
 /* calculating q, p and tr3 parameters to exponentiate a matrix */
-void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3) {
+void get_qp(gsl_matrix *A, double *q, double *p) {
     /* q = det(A) */
     *q = MGET(A,0,0) * ( MGET(A,1,1)*MGET(A,2,2) - MGET(A,1,2)*MGET(A,2,1) )
        - MGET(A,0,1) * ( MGET(A,1,0)*MGET(A,2,2) - MGET(A,1,2)*MGET(A,2,0) )
@@ -198,8 +202,6 @@ void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3) {
     /* p = tr(A^2)/2 */
     *p = (MGET(A,0,0) * MGET(A,0,0) + MGET(A,1,1) * MGET(A,1,1) + MGET(A,2,2) * MGET(A,2,2))/2.0
        +  MGET(A,0,1) * MGET(A,1,0) + MGET(A,1,2) * MGET(A,2,1) + MGET(A,2,0) * MGET(A,0,2);
-    /* tr3 = tr(A)/3 */
-    *tr3 = (MGET(A,0,0) + MGET(A,1,1) + MGET(A,2,2))/3.0;
 }
 
 

@@ -42,7 +42,7 @@ void free_space(Space *space);
 void setH0(Space *S, double E);
 void m2(double t, double h, Space *space);
 void expi_matrix_vec(gsl_matrix *A, double t, Space *S);
-void get_qptr3(gsl_matrix *A, double *q, double *p, double *tr3);
+void get_qp(gsl_matrix *A, double *q, double *p);
 gsl_complex exp1i(double x, double t);
 void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y);
 double v(double t, void *interpo);

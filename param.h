@@ -12,7 +12,7 @@
 #define DELTACP     (195.0)
 
 /* precision */
-#define PASSO   (1e-3)
+#define PASSO   (1e-2)
 
 /* constants */
 #define G_F     (1.1663787e-23) /* constante de Fermi em eV^{-2} */

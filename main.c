@@ -166,41 +166,50 @@ void expi_matrix_vec(gsl_matrix *A, double t, Space *S) {
     /* eigenvalues of matrix A */
     double l0, l1, l2;
     gsl_poly_solve_cubic(0.0, -p, q, &l0, &l1, &l2);
-    /* eigenvalues differences */
-    double a = l1 - l0;
-    double b = l2 - l0;
-    /* making A traceless */
-    MSET(A, 0, 0, MGET(A, 0, 0) - tr3);
-    MSET(A, 1, 1, MGET(A, 1, 1) - tr3);
-    MSET(A, 2, 2, MGET(A, 2, 2) - tr3);
-    /* calculating A.psi and A^2.psi */
-    realmatrix_complexvec(A, S->psi, S->Apsi);
-    realmatrix_complexvec(A, S->Apsi, S->AApsi);
-    /* parameters r0 and r1 */
-    gsl_complex r0, r1;
-    r0 = exp1i(a, t);
-    r1 = gsl_complex_div_real(
-           gsl_complex_sub(
-             exp1i(a, t), exp1i(b, t)
-           ),
-           a-b
-         );
-    /* scaling psi, A.psi and A^2.psi */
-    gsl_vector_complex_scale(S->psi,
-        gsl_complex_sub(GSL_COMPLEX_ONE,
-            gsl_complex_mul_real(
-                gsl_complex_sub(r0, gsl_complex_mul_real(r1, l1)),
-                l0
+    if (!(l0 == l1 && l0 == l2)) {
+        /* eigenvalues differences */
+        double a = l1 - l0;
+        double b = l2 - l0;
+        /* making A traceless */
+        MSET(A, 0, 0, MGET(A, 0, 0) - tr3);
+        MSET(A, 1, 1, MGET(A, 1, 1) - tr3);
+        MSET(A, 2, 2, MGET(A, 2, 2) - tr3);
+        /* calculating A.psi and A^2.psi */
+        realmatrix_complexvec(A, S->psi, S->Apsi);
+        realmatrix_complexvec(A, S->Apsi, S->AApsi);
+        /* parameters r0 and r1 */
+        gsl_complex r0, r1, r_aux;
+        /* a and b can not be zero at the same time */
+        r0    = (a == 0) ? gsl_complex_rect(0.0, t) : exp1i(a, t);
+        r_aux = (b == 0) ? gsl_complex_rect(0.0, t) : exp1i(b, t);
+        r1 = (a == b)
+           ? gsl_complex_mul(
+              gsl_complex_polar(1/(b*b), b*t),
+              gsl_complex_rect(-1.0, b*t)
+             )
+           : gsl_complex_div_real(
+               gsl_complex_sub(
+                 r0, r_aux
+               ),
+               a-b
+             );
+        /* scaling psi, A.psi and A^2.psi */
+        gsl_vector_complex_scale(S->psi,
+            gsl_complex_sub(GSL_COMPLEX_ONE,
+                gsl_complex_mul_real(
+                    gsl_complex_sub(r0, gsl_complex_mul_real(r1, l1)),
+                    l0
+                )
             )
-        )
-    );
-    gsl_vector_complex_scale(S->Apsi,
-        gsl_complex_add(r0, gsl_complex_mul_real(r1, l2))
-    );
-    gsl_vector_complex_scale(S->AApsi, r1);
-    /* adding all contributions */
-    gsl_vector_complex_add(S->psi, S->Apsi);
-    gsl_vector_complex_add(S->psi, S->AApsi);
+        );
+        gsl_vector_complex_scale(S->Apsi,
+            gsl_complex_add(r0, gsl_complex_mul_real(r1, l2))
+        );
+        gsl_vector_complex_scale(S->AApsi, r1);
+        /* adding all contributions */
+        gsl_vector_complex_add(S->psi, S->Apsi);
+        gsl_vector_complex_add(S->psi, S->AApsi);
+    }
     /* final scaling */
     gsl_vector_complex_scale(S->psi,
         gsl_complex_polar(1.0, (tr3 + l0) * t)
@@ -235,13 +244,14 @@ gsl_complex exp1i(double x, double t) {
 }
 
 
-/* apply real matrix A to complex vector x and storing in y = A.x */
+/* apply real matrix A to complex vector x and stores in y = A.x */
 void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y) {
-    size_t i, j;
+    size_t i, j; gsl_complex z;
     for (i = 0; i < DIM; i++) {
-        VSET(y, i, gsl_complex_mul_real(VGET(x, 0), MGET(A, i, 0)));
-        for (j = 1; j < 3; j++)
-            VSET(y, i, gsl_complex_add(VGET(y, i), gsl_complex_mul_real(VGET(x, j), MGET(A, i, j))));
+        z = gsl_complex_mul_real(VGET(x, 0), MGET(A, i, 0));
+        for (j = 1; j < DIM; j++)
+            z = gsl_complex_add(z, gsl_complex_mul_real(VGET(x, j), MGET(A, i, j)));
+        VSET(y, i, z);
     }
 }
 

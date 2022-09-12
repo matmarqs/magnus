@@ -9,7 +9,7 @@
 #include <gsl/gsl_vector.h>         /* vector definitions */
 #include <gsl/gsl_matrix.h>         /* matrix definitions */
 #include <gsl/gsl_blas.h>           /* basic linear algebra operations */
-#include <gsl/gsl_linalg.h>         /* linear algebra */
+//#include <gsl/gsl_linalg.h>         /* linear algebra */
 #include <gsl/gsl_spline.h>         /* interpolation of real data */
 #include <gsl/gsl_poly.h>           /* find cubic roots */
 

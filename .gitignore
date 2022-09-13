@@ -8,3 +8,5 @@ gonzalez.pdf
 main
 a.out
 .*.swp
+old/
+output/

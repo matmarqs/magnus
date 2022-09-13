@@ -12,6 +12,7 @@
 //#include <gsl/gsl_linalg.h>         /* linear algebra */
 #include <gsl/gsl_spline.h>         /* interpolation of real data */
 #include <gsl/gsl_poly.h>           /* find cubic roots */
+#include <gsl/gsl_eigen.h>          /* solve eigensystems */
 
 #define DIM 3
 #define VGET(V, i)          gsl_vector_complex_get((V), (i))
@@ -50,20 +51,26 @@ typedef struct {
 } interpol;
 
 typedef struct {
+    gsl_matrix *vec;
+    gsl_vector *val;
+    gsl_eigen_symmv_workspace *work;
+} eigen_sys;
+
+typedef struct {
     gsl_matrix *H0, *W;
     gsl_matrix *Omega2, *Omega4;
-    gsl_vector_complex *psi, *Apsi, *AApsi;
+    gsl_vector_complex *psi, *psi_aux;
     interpol *interp;
     double *a, *b;
+    eigen_sys *eig;
 } Space;
 
 
 /* DEFINITIONS */
-void get_qp(gsl_matrix *A, double *q, double *p);
+void realmatrix_trans_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y);
 void free_space(Space *space);
 void sqrt2_GF_NA(double *Ne, int N);
 Space *init_space(double *x, double *Ne, int N);
-gsl_complex exp1i(double x, double t);
 void expi_matrix_vec(gsl_matrix *A, double t, Space *S);
 void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y);
 void print_matrix(gsl_matrix *M, size_t dim);
@@ -90,7 +97,7 @@ int main() {
     print_matrix(A, DIM);
     //printf("\n");
     //print_vec(psi, DIM);
-    expi_matrix_vec(A, 100.0, space);
+    expi_matrix_vec(A, 2.0, space);
     //print_matrix(A, DIM);
     printf("\n");
     printf("norm[exp(i A t) psi] = %e\n\n", gsl_blas_dznrm2(psi));
@@ -132,89 +139,32 @@ void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_comp
 }
 
 
-/* expA <- exp(i t A) */
+/* apply real matrix A^T (transpose) to complex vector x and stores in y = A^T.x */
+void realmatrix_trans_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y) {
+    size_t i, j; gsl_complex z;
+    for (i = 0; i < DIM; i++) {
+        z = gsl_complex_mul_real(VGET(x, 0), MGET(A, 0, i));
+        for (j = 1; j < DIM; j++)
+            z = gsl_complex_add(z, gsl_complex_mul_real(VGET(x, j), MGET(A, j, i)));
+        VSET(y, i, z);
+    }
+}
+
+
+/* psi <- exp(i t A) . psi */
 void expi_matrix_vec(gsl_matrix *A, double t, Space *S) {
-    /* tr3 = tr(A)/3 */
-    double tr3 = (MGET(A,0,0) + MGET(A,1,1) + MGET(A,2,2))/3.0;
-    /* making A traceless */
-    MSET(A, 0, 0, MGET(A, 0, 0) - tr3);
-    MSET(A, 1, 1, MGET(A, 1, 1) - tr3);
-    MSET(A, 2, 2, MGET(A, 2, 2) - tr3);
-    /* calculating base parameters q, p */
-    double q, p;
-    get_qp(A, &q, &p);
-    /* eigenvalues of matrix A */
-    double l0, l1, l2;
-    gsl_poly_solve_cubic(0.0, -p, q, &l0, &l1, &l2);
-    if (!(l0 == l1 && l0 == l2)) {
-        /* eigenvalues differences */
-        double a = l1 - l0;
-        double b = l2 - l0;
-        /* calculating A.psi and A^2.psi */
-        realmatrix_complexvec(A, S->psi, S->Apsi);
-        realmatrix_complexvec(A, S->Apsi, S->AApsi);
-        /* parameters r0 and r1 */
-        gsl_complex r0, r1, r_aux;
-        /* a and b can not be zero at the same time */
-        r0    = (a == 0) ? gsl_complex_rect(0.0, t) : exp1i(a, t);
-        r_aux = (b == 0) ? gsl_complex_rect(0.0, t) : exp1i(b, t);
-        r1 = (a == b)
-           ? gsl_complex_mul(
-              gsl_complex_polar(1/(b*b), b*t),
-              gsl_complex_rect(-1.0, b*t)
-             )
-           : gsl_complex_div_real(
-               gsl_complex_sub(
-                 r0, r_aux
-               ),
-               a-b
-             );
-        /* scaling psi, A.psi and A^2.psi */
-        gsl_vector_complex_scale(S->psi,
-            gsl_complex_sub(GSL_COMPLEX_ONE,
-                gsl_complex_mul_real(
-                    gsl_complex_sub(r0, gsl_complex_mul_real(r1, l1)),
-                    l0
-                )
+    gsl_eigen_symmv(A, S->eig->val, S->eig->vec, S->eig->work);
+    /* U = eigvec, A = U D U^T */
+    realmatrix_trans_complexvec(S->eig->vec, S->psi, S->psi_aux);   /* psi_aux = U^T psi */
+    for (size_t j = 0; j < DIM; j++) {  /* psi_aux = e^(iDt) U^T . psi */
+        VSET(S->psi_aux, j,
+            gsl_complex_mul(
+                VGET(S->psi_aux, j),
+                gsl_complex_polar(1.0, t * gsl_vector_get(S->eig->val, j))
             )
         );
-        gsl_vector_complex_scale(S->Apsi,
-            gsl_complex_add(r0, gsl_complex_mul_real(r1, l2))
-        );
-        gsl_vector_complex_scale(S->AApsi, r1);
-        /* adding all contributions */
-        gsl_vector_complex_add(S->psi, S->Apsi);
-        gsl_vector_complex_add(S->psi, S->AApsi);
     }
-    /* final scaling */
-    gsl_vector_complex_scale(S->psi,
-        gsl_complex_polar(1.0, (tr3 + l0) * t)
-    );
-}
-
-
-/* calculating q, p and tr3 parameters to exponentiate a matrix */
-void get_qp(gsl_matrix *A, double *q, double *p) {
-    /* q = det(A) */
-    *q = MGET(A,0,0) * ( MGET(A,1,1)*MGET(A,2,2) - MGET(A,1,2)*MGET(A,2,1) )
-       - MGET(A,0,1) * ( MGET(A,1,0)*MGET(A,2,2) - MGET(A,1,2)*MGET(A,2,0) )
-       + MGET(A,0,2) * ( MGET(A,1,0)*MGET(A,2,1) - MGET(A,1,1)*MGET(A,2,0) );
-    /* p = tr(A^2)/2 */
-    *p = (MGET(A,0,0) * MGET(A,0,0) + MGET(A,1,1) * MGET(A,1,1) + MGET(A,2,2) * MGET(A,2,2))/2.0
-       +  MGET(A,0,1) * MGET(A,1,0) + MGET(A,1,2) * MGET(A,2,1) + MGET(A,2,0) * MGET(A,0,2);
-}
-
-
-/*               exp(i x t) - 1  */
-/*  exp1i(x, t) = --------------  */
-/*                      x        */
-gsl_complex exp1i(double x, double t) {
-    return gsl_complex_div_real(
-               gsl_complex_sub(
-                   gsl_complex_polar(1.0, x*t), GSL_COMPLEX_ONE
-               ),
-               x
-           );
+    realmatrix_complexvec(S->eig->vec, S->psi_aux, S->psi); /* psi = U e^(iDt) U^T . psi */
 }
 
 
@@ -224,6 +174,11 @@ Space *init_space(double *x, double *Ne, int N) {
     Space *space = malloc(sizeof(Space));
     space->interp = malloc(sizeof(interpol));
     space->interp->acc = gsl_interp_accel_alloc();
+    /* allocating memory for eigensystem */
+    space->eig = malloc(sizeof(eigen_sys));
+    space->eig->val = gsl_vector_alloc(DIM);
+    space->eig->vec = gsl_matrix_alloc(DIM, DIM);
+    space->eig->work = gsl_eigen_symmv_alloc(DIM);
     /* scaling and interpolating data */
     space->interp->spline = gsl_spline_alloc(gsl_interp_steffen, N);  /* STEFFEN */
     sqrt2_GF_NA(Ne, N);
@@ -267,8 +222,7 @@ Space *init_space(double *x, double *Ne, int N) {
     VSET(space->psi, 0, gsl_complex_rect(c12*c13, 0.0));
     VSET(space->psi, 1, gsl_complex_rect(s12*c13, 0.0));
     VSET(space->psi, 2, gsl_complex_rect(s13, 0.0));
-    space->Apsi = gsl_vector_complex_alloc(DIM);
-    space->AApsi = gsl_vector_complex_alloc(DIM);
+    space->psi_aux = gsl_vector_complex_alloc(DIM);
     return space;
 }
 
@@ -286,16 +240,18 @@ void free_space(Space *space) {
     gsl_matrix_free(space->H0); gsl_matrix_free(space->W);
     gsl_matrix_free(space->Omega2); gsl_matrix_free(space->Omega4);
     gsl_vector_complex_free(space->psi);
-    gsl_vector_complex_free(space->Apsi);
-    gsl_vector_complex_free(space->AApsi);
+    gsl_vector_complex_free(space->psi_aux);
     /* parameters */
     free(space->a); free(space->b);
     /* interpol */
     gsl_interp_accel_free(space->interp->acc);
     gsl_spline_free(space->interp->spline);
     free(space->interp);
+    /* eigensystem */
+    gsl_vector_free(space->eig->val);
+    gsl_matrix_free(space->eig->vec);
+    gsl_eigen_symmv_free(space->eig->work);
+    free(space->eig);
     /* last */
     free(space);
 }
-
-

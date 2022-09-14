@@ -56,6 +56,7 @@ typedef struct {
 Space *init_space(double *x, double *Ne, int N);
 void free_space(Space *space);
 void setH0(Space *S, double E);
+void step(double t, double h, Space *space, int method);
 void m2(double t, double h, Space *space);
 void m4(double t, double h, Space *space);
 void expi_matrix_vec(gsl_matrix *A, double t, Space *S);

@@ -35,28 +35,29 @@ int main(int argc, char *argv[]) {
                             /***        ODE        ***/
                             /*************************/
     long num_it = lround((T_FINAL - t0) / PASSO);   /* number of iterations */
-    int it_width = (int) log10(num_it) + 1;   /* variable to format and print things */
-    double energy, min_energy = 6.44/*0.02*/, max_energy = 16.56;  /* energia em MeV (a mais provavel eh 6.44) */
-    int n_energies = 828;
+    //int it_width = (int) log10(num_it) + 1;   /* variable to format and print things */
+    double energy, min_energy = 0.02, max_energy = 16.56;  /* energia em MeV (a mais provavel eh 6.44) */
+    int n_energies = 50;
     //gsl_complex z;
-    for (int k = 0; k < 1/*n_energies*/; k++) {
+    for (int k = 0; k < n_energies; k++) {
+        gsl_vector_complex_memcpy(space->psi, space->elec); /* initial condition = nu_e */
         energy = min_energy + k * (max_energy - min_energy) / ((double) n_energies - 1.0);
-        setH0(space, energy);
+        setH0(space, energy);   /* dividing by the energy */
+        comm(space->H0, space->W, space->commH0_W); /* calculating [H0, W] */
         for (long i = 0; i <= num_it; i++) {
             ti = i * PASSO + t0;    /* constant step size (variable will be implemented) */
-            //gsl_blas_zdotc(space->psi, space->elec, &z);
-            printf("%*ld%15.5e%15.5e\n", it_width,
-                    i, ti, //gsl_blas_dznrm2(space->psi),
-                    ///*amp2(space->psi, 0),*/ GSL_REAL(VGET(space->psi, 0)), GSL_IMAG(VGET(space->psi, 0)),   /* psi_1 */
-                    ///*amp2(space->psi, 1),*/ GSL_REAL(VGET(space->psi, 1)), GSL_IMAG(VGET(space->psi, 1)),   /* psi_2 */
-                    ///*amp2(space->psi, 2) */ GSL_REAL(VGET(space->psi, 2)), GSL_IMAG(VGET(space->psi, 2)),   /* psi_3 */
-                    gsl_blas_dznrm2(space->psi)   /* norm of psi */
-                    //gsl_complex_abs2(z)
-            );
-            m4(ti, PASSO, space);   /* Magnus 4 */
-            expi_cmatrix_vec(space->Omega4, -PASSO, space);   /* psi <- exp(-i Omega4 h) psi */
+            ////gsl_blas_zdotc(space->psi, space->elec, &z);
+            //printf("%*ld%15.5e%15.5e\n", it_width,
+            //        i, ti, //gsl_blas_dznrm2(space->psi),
+            //        ///*amp2(space->psi, 0),*/ GSL_REAL(VGET(space->psi, 0)), GSL_IMAG(VGET(space->psi, 0)),   /* psi_1 */
+            //        ///*amp2(space->psi, 1),*/ GSL_REAL(VGET(space->psi, 1)), GSL_IMAG(VGET(space->psi, 1)),   /* psi_2 */
+            //        ///*amp2(space->psi, 2) */ GSL_REAL(VGET(space->psi, 2)), GSL_IMAG(VGET(space->psi, 2)),   /* psi_3 */
+            //        gsl_blas_dznrm2(space->psi)   /* norm of psi */
+            //        //gsl_complex_abs2(z)
+            //);
+            step(ti, PASSO, space, 2);  /* Magnus 2 */
         }
-        //printf("%15.5e%15.5e\n", energy, surv(space->psi, space->elec));
+        printf("%15.5e%15.5e\n", energy, surv(space->psi, space->elec));
         //printf("energy = %.5e\n", energy);
         /* this printf below is for the survival probability */
         //printf(format, t0, energy, surv(space->psi), gsl_blas_dznrm2(space->psi));
@@ -119,16 +120,13 @@ Space *init_space(double *x, double *Ne, int N) {
     MSET(W, 0, 0, W11);  MSET(W, 0, 1, W12);  MSET(W, 0, 2, W13);
     MSET(W, 1, 0, W21);  MSET(W, 1, 1, W22);  MSET(W, 1, 2, W23);
     MSET(W, 2, 0, W31);  MSET(W, 2, 1, W32);  MSET(W, 2, 2, W33);
+    space->W = W;
     /* we have H0 = (1 / (E in MeV) ) . diag(-b, 0, a) */
-    gsl_matrix *H0 = gsl_matrix_alloc(DIM, DIM); gsl_matrix_set_zero(H0);
+    space->H0 = gsl_matrix_alloc(DIM, DIM); gsl_matrix_set_zero(space->H0);
     space->a = malloc(sizeof(double)); space->b = malloc(sizeof(double));
     *space->a = DM2_32 * (1e-6 / 2.0) * EV_CM * R_SUN;
     *space->b = DM2_21 * (1e-6 / 2.0) * EV_CM * R_SUN;
     space->commH0_W = gsl_matrix_alloc(DIM, DIM);
-    comm(H0, W, space->commH0_W);
-    /* allocating memory for workspace */
-    space->W = W;
-    space->H0 = H0;
     space->Omega2 = gsl_matrix_alloc(DIM, DIM);
     space->Omega4 = gsl_matrix_complex_alloc(DIM, DIM);
     /* setting electron neutrino initial state */
@@ -137,7 +135,6 @@ Space *init_space(double *x, double *Ne, int N) {
     VSET(space->elec, 1, gsl_complex_rect(s12*c13, 0.0));
     VSET(space->elec, 2, gsl_complex_rect(s13, 0.0));
     space->psi = gsl_vector_complex_alloc(DIM);
-    gsl_vector_complex_memcpy(space->psi, space->elec);
     space->psi_aux = gsl_vector_complex_alloc(DIM);
     return space;
 }
@@ -177,6 +174,18 @@ void setH0(Space *S, double E) {
     MSET(S->H0, 2, 2, MASS_ORDER == 'N' ? (*S->a / E) : (-*S->a / E));
 }
 
+
+/* apply method M2 or M4 */
+void step(double t, double h, Space *space, int method) {
+    if (method == 2) {
+        m2(t, h, space);    /* Magnus 2 */
+        expi_matrix_vec(space->Omega2, -h, space);  /* psi <- exp(-i Omega2 h) psi */
+    }
+    else {
+        m4(t, h, space);   /* Magnus 4 */
+        expi_cmatrix_vec(space->Omega4, -h, space); /* psi <- exp(-i Omega4 h) psi */
+    }
+}
 
 /* Omega2 matrix for Magnus Expansion of order 2 */
 void m2(double t, double h, Space *space) {

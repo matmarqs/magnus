@@ -1,8 +1,5 @@
 #include "main.h"
 #include "param.h"
-#include <gsl/gsl_cblas.h>
-#include <gsl/gsl_complex_math.h>
-#include <gsl/gsl_vector_complex_double.h>
 
 /* DEFINITIONS */
 
@@ -38,26 +35,28 @@ int main(int argc, char *argv[]) {
                             /***        ODE        ***/
                             /*************************/
     long num_it = lround((T_FINAL - t0) / PASSO);   /* number of iterations */
-    //int it_width = (int) log10(num_it) + 1;   /* variable to format and print things */
-    double energy, min_energy = 0.02, max_energy = 16.56;  /* energia em MeV (a mais provavel eh 6.44) */
+    int it_width = (int) log10(num_it) + 1;   /* variable to format and print things */
+    double energy, min_energy = 6.44/*0.02*/, max_energy = 16.56;  /* energia em MeV (a mais provavel eh 6.44) */
     int n_energies = 828;
-    for (int k = 0; k < n_energies; k++) {
+    //gsl_complex z;
+    for (int k = 0; k < 1/*n_energies*/; k++) {
         energy = min_energy + k * (max_energy - min_energy) / ((double) n_energies - 1.0);
         setH0(space, energy);
         for (long i = 0; i <= num_it; i++) {
             ti = i * PASSO + t0;    /* constant step size (variable will be implemented) */
-            ////printf("%*ld%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e%15.5e\n", it_width,
-            //printf("%*ld%15.5e%15.5e%15.5e%15.5e\n", it_width,
-            //        i, ti, //gsl_blas_dznrm2(space->psi),
-            //        amp2(space->psi, 0), //GSL_REAL(VGET(space->psi, 0)), GSL_IMAG(VGET(space->psi, 0)),   /* psi_1 */
-            //        amp2(space->psi, 1), //GSL_REAL(VGET(space->psi, 1)), GSL_IMAG(VGET(space->psi, 1)),   /* psi_2 */
-            //        amp2(space->psi, 2)  //GSL_REAL(VGET(space->psi, 2)), GSL_IMAG(VGET(space->psi, 2)),   /* psi_3 */
-            //        //gsl_blas_dznrm2(space->psi)   /* norm of psi */
-            //);
-            m2(ti, PASSO, space);   /* Magnus 2 */
-            expi_matrix_vec(space->Omega2, -PASSO, space);   /* psi <- exp(-i Omega2 h) psi */
+            //gsl_blas_zdotc(space->psi, space->elec, &z);
+            printf("%*ld%15.5e%15.5e\n", it_width,
+                    i, ti, //gsl_blas_dznrm2(space->psi),
+                    ///*amp2(space->psi, 0),*/ GSL_REAL(VGET(space->psi, 0)), GSL_IMAG(VGET(space->psi, 0)),   /* psi_1 */
+                    ///*amp2(space->psi, 1),*/ GSL_REAL(VGET(space->psi, 1)), GSL_IMAG(VGET(space->psi, 1)),   /* psi_2 */
+                    ///*amp2(space->psi, 2) */ GSL_REAL(VGET(space->psi, 2)), GSL_IMAG(VGET(space->psi, 2)),   /* psi_3 */
+                    gsl_blas_dznrm2(space->psi)   /* norm of psi */
+                    //gsl_complex_abs2(z)
+            );
+            m4(ti, PASSO, space);   /* Magnus 4 */
+            expi_cmatrix_vec(space->Omega4, -PASSO, space);   /* psi <- exp(-i Omega4 h) psi */
         }
-        printf("%15.5e%15.5e\n", energy, surv(space->psi, space->elec));
+        //printf("%15.5e%15.5e\n", energy, surv(space->psi, space->elec));
         //printf("energy = %.5e\n", energy);
         /* this printf below is for the survival probability */
         //printf(format, t0, energy, surv(space->psi), gsl_blas_dznrm2(space->psi));
@@ -188,14 +187,18 @@ void m2(double t, double h, Space *space) {
 }
 
 
-/* Omega2 matrix for Magnus Expansion of order 2 */
+/* Omega4 matrix for Magnus Expansion of order 4 */
 void m4(double t, double h, Space *space) {
     double v_pls = v(t + (0.5 + 0.5/SQRT3) * h, space->interp),
            v_min = v(t - (0.5 + 0.5/SQRT3) * h, space->interp);
-    for (size_t i = 0; i < space->H0->size1; i++) {
-        for (size_t j = 0; j < space->H0->size2; j++) {
-        }
-    }
+    for (size_t i = 0; i < space->H0->size1; i++)
+        for (size_t j = 0; j < space->H0->size2; j++)
+            gsl_matrix_complex_set(space->Omega4, i, j,
+                gsl_complex_rect(
+                    (MGET(space->H0, i, j) + 0.5*(v_pls + v_min)*MGET(space->W, i, j)) * h,
+                    (SQRT3 / 12.0) * (v_pls - v_min) * MGET(space->commH0_W, i, j) * h * h
+                )
+            );
 }
 
 

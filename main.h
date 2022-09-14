@@ -24,6 +24,8 @@
 #define SQRT3               1.73205080756887729352  /* sqrt(3) */
 
 
+typedef double (function)(double x, void *params);
+
 typedef struct {
     gsl_interp_accel *acc;
     gsl_spline *spline;
@@ -56,18 +58,20 @@ typedef struct {
 Space *init_space(double *x, double *Ne, int N);
 void free_space(Space *space);
 void setH0(Space *S, double E);
-void step(double t, double h, Space *space, int method);
-void m2(double t, double h, Space *space);
-void m4(double t, double h, Space *space);
+void step(double t, double h, int order, Space *space, function *v);
+void m4(double t, double h, Space *space, function *f);
+void m2(double t, double h, Space *space, function *f);
 void expi_matrix_vec(gsl_matrix *A, double t, Space *S);
 void expi_cmatrix_vec(gsl_matrix_complex *A, double t, Space *S);
 void realmatrix_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y);
 void realmatrix_trans_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vector_complex *y);
 void comm(gsl_matrix *A, gsl_matrix *B, gsl_matrix *C);
-double v(double t, void *interpo);
+double ne_interp(double t, void *interpo);
+double ne_expprf(double t, void *params);
 void sqrt2_GF_NA(double *Ne, int N);
 double amp2(gsl_vector_complex *psi, size_t i);
 double surv(gsl_vector_complex *psi, gsl_vector_complex *neutrino);
 int readalloc(FILE *stream, double **x_ptr, double **y_ptr, int chunk);
 void print_matrix(gsl_matrix *M);
+void print_cmatrix(gsl_matrix_complex *M);
 void print_vec(gsl_vector_complex *psi);

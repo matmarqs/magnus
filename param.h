@@ -1,6 +1,6 @@
 #define NUM_NU      (3)     /* numero de neutrinos */
-#define T_0         (0.0)
-#define T_FINAL     (1.0)
+#define T_0         (0.1)   /* initial dimensionless radius */
+#define T_FINAL     (1.0)   /* final dimensionless radius */
 #define MASS_ORDER  ('N')   /* 'N' for normal, 'I' for inverted */
 
 /* mixing */                    /* http://www.nu-fit.org/?q=node/238 */

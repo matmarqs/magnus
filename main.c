@@ -36,31 +36,22 @@ int main(int argc, char *argv[]) {
                             /*************************/
     long num_it = lround((T_FINAL - t0) / PASSO);   /* number of iterations */
     //int it_width = (int) log10(num_it) + 1;   /* variable to format and print things */
-    double energy, min_energy = 0.02, max_energy = 16.56;  /* energia em MeV (a mais provavel eh 6.44) */
-    int n_energies = 50;
+    double energy; double min_E = 0.02, max_E = 16.56;  /* energia em MeV (a mais provavel eh 6.44) */
+    int n_energies = 200;
+    //double power, min_pow = -1.0, max_pow = 7.0;
     //gsl_complex z;
     for (int k = 0; k < n_energies; k++) {
-        gsl_vector_complex_memcpy(space->psi, space->elec); /* initial condition = nu_e */
-        energy = min_energy + k * (max_energy - min_energy) / ((double) n_energies - 1.0);
+        //power = min_pow + k * (max_pow - min_pow) / ((double) n_energies - 1.0);
+        //energy = pow(10.0, power);
+        energy = min_E + k * (max_E - min_E) / ((double) n_energies - 1.0);
         setH0(space, energy);   /* dividing by the energy */
         comm(space->H0, space->W, space->commH0_W); /* calculating [H0, W] */
+        gsl_vector_complex_memcpy(space->psi, space->elec); /* initial condition = nu_e */
         for (long i = 0; i <= num_it; i++) {
-            ti = i * PASSO + t0;    /* constant step size (variable will be implemented) */
-            ////gsl_blas_zdotc(space->psi, space->elec, &z);
-            //printf("%*ld%15.5e%15.5e\n", it_width,
-            //        i, ti, //gsl_blas_dznrm2(space->psi),
-            //        ///*amp2(space->psi, 0),*/ GSL_REAL(VGET(space->psi, 0)), GSL_IMAG(VGET(space->psi, 0)),   /* psi_1 */
-            //        ///*amp2(space->psi, 1),*/ GSL_REAL(VGET(space->psi, 1)), GSL_IMAG(VGET(space->psi, 1)),   /* psi_2 */
-            //        ///*amp2(space->psi, 2) */ GSL_REAL(VGET(space->psi, 2)), GSL_IMAG(VGET(space->psi, 2)),   /* psi_3 */
-            //        gsl_blas_dznrm2(space->psi)   /* norm of psi */
-            //        //gsl_complex_abs2(z)
-            //);
-            step(ti, PASSO, space, 2);  /* Magnus 2 */
+            ti = i * PASSO + t0;    /* constant step size */
+            step(ti, PASSO, 2, space, &ne_interp);  /* Magnus */
         }
         printf("%15.5e%15.5e\n", energy, surv(space->psi, space->elec));
-        //printf("energy = %.5e\n", energy);
-        /* this printf below is for the survival probability */
-        //printf(format, t0, energy, surv(space->psi), gsl_blas_dznrm2(space->psi));
     }
 
 
@@ -97,21 +88,24 @@ Space *init_space(double *x, double *Ne, int N) {
     sqrt2_GF_NA(Ne, N);
     gsl_spline_init(space->interp->spline, x, Ne, N);
     /* defining the parameters */
-    double th12 = DEG_TO_RAD(THETA12),
-           //th23,
-           //d_CP,
-           th13;
-    /* checking number of neutrinos and setting parameters accordingly */
-    if (NUM_NU == 2) {
-        th13 /*= th23 = d_CP*/ = 0.0;
-    }
-    else {
-        th13 = DEG_TO_RAD(THETA13);// th23 = DEG_TO_RAD(THETA23); d_CP = DEG_TO_RAD(DELTACP);
-    }
+    //double th12 = DEG_TO_RAD(THETA12),
+    //       //th23,
+    //       //d_CP,
+    //       th13;
+    ///* checking number of neutrinos and setting parameters accordingly */
+    //if (NUM_NU == 2) {
+    //    th13 /*= th23 = d_CP*/ = 0.0;
+    //}
+    //else {
+    //    th13 = DEG_TO_RAD(THETA13);// th23 = DEG_TO_RAD(THETA23); d_CP = DEG_TO_RAD(DELTACP);
+    //}
+    ///* calculating mixing matrix */
+    //double s12 = sin(th12), c12 = cos(th12),
+    //       //s23 = sin(th23), c23 = cos(th23),
+    //       s13 = sin(th13), c13 = cos(th13);
     /* calculating mixing matrix */
-    double s12 = sin(th12), c12 = cos(th12),
-           //s23 = sin(th23), c23 = cos(th23),
-           s13 = sin(th13), c13 = cos(th13);
+    double s12 = sqrt(0.308) , c12 = sqrt(1 - s12*s12),
+           s13 = sqrt(0.0234), c13 = sqrt(1 - s13*s13);
     double
     W11=c13*c13*c12*c12,  W12=c12*s12*c13*c13,  W13=c12*c13*s13,
     W21=c12*s12*c13*c13,  W22=s12*s12*c13*c13,  W23=s12*c13*s13,
@@ -124,8 +118,10 @@ Space *init_space(double *x, double *Ne, int N) {
     /* we have H0 = (1 / (E in MeV) ) . diag(-b, 0, a) */
     space->H0 = gsl_matrix_alloc(DIM, DIM); gsl_matrix_set_zero(space->H0);
     space->a = malloc(sizeof(double)); space->b = malloc(sizeof(double));
-    *space->a = DM2_32 * (1e-6 / 2.0) * EV_CM * R_SUN;
-    *space->b = DM2_21 * (1e-6 / 2.0) * EV_CM * R_SUN;
+    //*space->a = DM2_32 * (1e-6 / 2.0) * EV_CM * R_SUN;
+    //*space->b = DM2_21 * (1e-6 / 2.0) * EV_CM * R_SUN;
+    *space->a = 4.35196e+06;
+    *space->b = 0.030554;
     space->commH0_W = gsl_matrix_alloc(DIM, DIM);
     space->Omega2 = gsl_matrix_alloc(DIM, DIM);
     space->Omega4 = gsl_matrix_complex_alloc(DIM, DIM);
@@ -175,39 +171,42 @@ void setH0(Space *S, double E) {
 }
 
 
-/* apply method M2 or M4 */
-void step(double t, double h, Space *space, int method) {
-    if (method == 2) {
-        m2(t, h, space);    /* Magnus 2 */
+/* apply order M2 or M4 */
+void step(double t, double h, int order, Space *space, function *f) {
+    if (order == 2) {
+        m2(t, h, space, f);    /* Magnus 2 */
         expi_matrix_vec(space->Omega2, -h, space);  /* psi <- exp(-i Omega2 h) psi */
     }
     else {
-        m4(t, h, space);   /* Magnus 4 */
+        m4(t, h, space, f);   /* Magnus 4 */
         expi_cmatrix_vec(space->Omega4, -h, space); /* psi <- exp(-i Omega4 h) psi */
     }
 }
 
 /* Omega2 matrix for Magnus Expansion of order 2 */
-void m2(double t, double h, Space *space) {
-    double v_bar = v(t + h/2, space->interp);   /* exponential midpoint rule */
+void m2(double t, double h, Space *space, function *f) {
+    double f_bar = f(t + h*0.5, space->interp);   /* exponential midpoint rule */
     gsl_matrix_memcpy(space->Omega2, space->W); /* W */
-    gsl_matrix_scale(space->Omega2, v_bar);     /* v_bar W */
-    gsl_matrix_add(space->Omega2, space->H0);   /* H0 + vbar W */
+    gsl_matrix_scale(space->Omega2, f_bar);     /* f_bar W */
+    gsl_matrix_add(space->Omega2, space->H0);   /* H0 + f_bar W */
 }
 
 
 /* Omega4 matrix for Magnus Expansion of order 4 */
-void m4(double t, double h, Space *space) {
-    double v_pls = v(t + (0.5 + 0.5/SQRT3) * h, space->interp),
-           v_min = v(t - (0.5 + 0.5/SQRT3) * h, space->interp);
+void m4(double t, double h, Space *space, function *f) {
+    double f_pls = f(t + (1.0 + 1.0/SQRT3)*h*0.5, space->interp),
+           f_min = f(t + (1.0 - 1.0/SQRT3)*h*0.5, space->interp);
     for (size_t i = 0; i < space->H0->size1; i++)
         for (size_t j = 0; j < space->H0->size2; j++)
             gsl_matrix_complex_set(space->Omega4, i, j,
                 gsl_complex_rect(
-                    (MGET(space->H0, i, j) + 0.5*(v_pls + v_min)*MGET(space->W, i, j)) * h,
-                    (SQRT3 / 12.0) * (v_pls - v_min) * MGET(space->commH0_W, i, j) * h * h
+                    (MGET(space->H0, i, j) + 0.5*(f_pls + f_min)*MGET(space->W, i, j)),
+                    (SQRT3 / 12.0) * (f_pls - f_min) * MGET(space->commH0_W, i, j) * h
                 )
             );
+    //printf("\n");
+    //print_cmatrix(space->Omega4);
+    //printf("\n");
 }
 
 
@@ -231,10 +230,10 @@ void expi_matrix_vec(gsl_matrix *A, double t, Space *S) {
 /* psi <- exp(i t A) . psi */
 void expi_cmatrix_vec(gsl_matrix_complex *A, double t, Space *S) {
     gsl_eigen_hermv(A, S->eig->cval, S->eig->cvec, S->eig->cwork);
-    /* U = eigvec, A = U D U^T */
-    gsl_blas_zgemv(CblasConjTrans, GSL_COMPLEX_ONE, S->eig->cvec,   /* psi_aux = U^T psi */
+    /* U = eigvec, A = U D U^dagger */
+    gsl_blas_zgemv(CblasConjTrans, GSL_COMPLEX_ONE, S->eig->cvec,   /* psi_aux = U^dagger psi */
                            S->psi, GSL_COMPLEX_ZERO, S->psi_aux);
-    for (size_t i = 0; i < A->size1; i++) {  /* psi_aux = e^(iDt) U^T . psi */
+    for (size_t i = 0; i < A->size1; i++) {  /* psi_aux = e^(iDt) U^dagger . psi */
         VSET(S->psi_aux, i,
             gsl_complex_mul(
                 VGET(S->psi_aux, i),
@@ -243,7 +242,7 @@ void expi_cmatrix_vec(gsl_matrix_complex *A, double t, Space *S) {
         );
     }
     gsl_blas_zgemv(CblasNoTrans, GSL_COMPLEX_ONE, S->eig->cvec,   /* psi = U . psi_aux */
-                         S->psi_aux, GSL_COMPLEX_ZERO, S->psi);
+                     S->psi_aux, GSL_COMPLEX_ZERO, S->psi);
 }
 
 
@@ -273,18 +272,27 @@ void realmatrix_trans_complexvec(gsl_matrix *A, gsl_vector_complex *x, gsl_vecto
 
 /* stores C = [A, B] = AB - BA */
 void comm(gsl_matrix *A, gsl_matrix *B, gsl_matrix *C) {
-    size_t i, k, j;
+    size_t i, k, j; double x;
     for (i = 0; i < A->size1; i++)
-        for (k = 0; k < B->size2; k++)
-            for (j = 0; j < A->size2; j++)
-                MSET(C, i, k, MGET(A, i, j)*MGET(B, j, k) - MGET(B, i, j)*MGET(A, j, k));
+        for (k = 0; k < B->size2; k++) {
+            x = MGET(A, i, 0)*MGET(B, 0, k) - MGET(B, i, 0)*MGET(A, 0, k);
+            for (j = 1; j < A->size2; j++)
+                x += MGET(A, i, j)*MGET(B, j, k) - MGET(B, i, j)*MGET(A, j, k);
+            MSET(C, i, k, x);
+        }
 }
 
 
 /* v = sqrt(2) . G_F . N_e */
-double v(double t, void *interpo) {  /* void pointer because this defines a gsl_function */
+double ne_interp(double t, void *interpo) {  /* void pointer because this defines a gsl_function */
     interpol *interp = (interpol *) interpo;
     return gsl_spline_eval(interp->spline, t, interp->acc);
+}
+
+
+double ne_expprf(double t, void *params) {
+    (void) params;  /* avoid unused parameter warning */
+    return 6.5956e+04 * exp(-10.54 * t);
 }
 
 
@@ -343,15 +351,39 @@ int readalloc(FILE *stream, double **x_ptr, double **y_ptr, int chunk) {
 void print_matrix(gsl_matrix *M) {
     for (size_t i = 0; i < M->size1; i++)  /* OUT OF RANGE ERROR */
         for (size_t j = 0; j < M->size2; j++)
-            printf("%e%c", gsl_matrix_get(M, i, j),
+            printf("%+.3e%c", gsl_matrix_get(M, i, j),
                   (j == M->size2-1) ? '\n' : ' ');
+}
+
+
+/* print matrix for debuggig */
+void print_cmatrix(gsl_matrix_complex *M) {
+    for (size_t i = 0; i < M->size1; i++)  /* OUT OF RANGE ERROR */
+        for (size_t j = 0; j < M->size2; j++)
+            printf("%+.3e + %+.3e i  %c", GSL_REAL(gsl_matrix_complex_get(M, i, j)),
+                                          GSL_IMAG(gsl_matrix_complex_get(M, i, j)),
+                                          (j == M->size2-1) ? '\n' : ' ');
 }
 
 
 /* print matrix for debuggig */
 void print_vec(gsl_vector_complex *psi) {
     for (size_t j = 0; j < psi->size; j++)
-        printf("%e + %e i  %c", GSL_REAL(gsl_vector_complex_get(psi, j)),
-                                GSL_IMAG(gsl_vector_complex_get(psi, j)),
-                                (j == psi->size-1) ? '\n' : ' ');
+        printf("%+.3e + %+.3e i  %c", GSL_REAL(gsl_vector_complex_get(psi, j)),
+                                      GSL_IMAG(gsl_vector_complex_get(psi, j)),
+                                      (j == psi->size-1) ? '\n' : ' ');
 }
+
+/***************/
+/* unused code */
+/***************/
+
+////gsl_blas_zdotc(space->psi, space->elec, &z);
+//printf("%*ld%15.5e%15.5e\n", it_width,
+//        i, ti, //gsl_blas_dznrm2(space->psi),
+//        ///*amp2(space->psi, 0),*/ GSL_REAL(VGET(space->psi, 0)), GSL_IMAG(VGET(space->psi, 0)),   /* psi_1 */
+//        ///*amp2(space->psi, 1),*/ GSL_REAL(VGET(space->psi, 1)), GSL_IMAG(VGET(space->psi, 1)),   /* psi_2 */
+//        ///*amp2(space->psi, 2) */ GSL_REAL(VGET(space->psi, 2)), GSL_IMAG(VGET(space->psi, 2)),   /* psi_3 */
+//        gsl_blas_dznrm2(space->psi)   /* norm of psi */
+//        //gsl_complex_abs2(z)
+//);

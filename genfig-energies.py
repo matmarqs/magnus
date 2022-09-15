@@ -3,11 +3,11 @@
 import numpy as np
 
 #magnus = 2
-magnus = 2
-profile = '-interp'
-#profile = ''
-#tipo = 'log'
-tipo = ''
+magnus = 4
+#profile = '-interp'
+profile = ''
+tipo = 'log'
+#tipo = ''
 
 
 from matplotlib import pyplot as plt

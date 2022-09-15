@@ -1,3 +1,8 @@
+/*
+Based on "Efficient numerical integration of neutrino oscillations in matter" [Casas]
+Autor: Mateus Marques
+*/
+
 #include "main.h"
 #include "param.h"
 
@@ -18,38 +23,25 @@ int main(int argc, char *argv[]) {
     /*int num_E = */readalloc(energy_file, &E, &p_E, 900);   /* 844 lines */
     /*int num_r = */readalloc(distr_file, &r0, &p_r0, 1300); /* 1226 lines */
     fclose(elecdens_file); fclose(energy_file); fclose(distr_file);
-
-
-                            /*************************/
-                            /***   INITIALIZING    ***/
-                            /*************************/
-    /* generating all parameters and allocating memory */
     Space *space = init_space(x, Ne, N);
-
-    /* declaring */
-    double t0 = T_0, ti;
-    //char *format = "%15.5e%15.5e%15.5e%15.5e\n";
 
 
                             /*************************/
                             /***        ODE        ***/
                             /*************************/
-    long num_it = lround((T_FINAL - t0) / PASSO);   /* number of iterations */
-    //int it_width = (int) log10(num_it) + 1;   /* variable to format and print things */
-    double energy; double min_E = 0.02, max_E = 16.56;  /* energia em MeV (a mais provavel eh 6.44) */
-    int n_energies = 200;
-    //double power, min_pow = -1.0, max_pow = 7.0;
-    //gsl_complex z;
+    long num_it = lround((T_FINAL - T_0) / PASSO);   /* number of iterations */
+    //int it_width = (int) log10(num_it) + 1;     /* variable to format iteration number */
+    double t_i, energy; int n_energies = 200;    /* energia em MeV (a mais provavel eh 6.44) */
     for (int k = 0; k < n_energies; k++) {
-        //power = min_pow + k * (max_pow - min_pow) / ((double) n_energies - 1.0);
-        //energy = pow(10.0, power);
-        energy = min_E + k * (max_E - min_E) / ((double) n_energies - 1.0);
+        //energy = linspace(k, 0.02, 16.56, n_energies);    /* min_E = 0.02, max_E = 16.56 */
+        //energy = logspace(k, -1.0, 7.0, n_energies);
+        energy = logspace(k, -1.0, 1.22, n_energies);
         setH0(space, energy);   /* dividing by the energy */
         comm(space->H0, space->W, space->commH0_W); /* calculating [H0, W] */
         gsl_vector_complex_memcpy(space->psi, space->elec); /* initial condition = nu_e */
         for (long i = 0; i <= num_it; i++) {
-            ti = i * PASSO + t0;    /* constant step size */
-            step(ti, PASSO, 2, space, &ne_interp);  /* Magnus */
+            t_i = i * PASSO + T_0;      /* constant step size */
+            step(t_i, PASSO, 4, space, &ne_expprf); /* Magnus */
         }
         printf("%15.5e%15.5e\n", energy, surv(space->psi, space->elec));
     }
@@ -71,11 +63,11 @@ int main(int argc, char *argv[]) {
 
 /* gera o workspace e retorna o pointer dele */
 Space *init_space(double *x, double *Ne, int N) {
-    /* initializing lower-level things */
+    /* allocating structures */
     Space *space = malloc(sizeof(Space));
     space->interp = malloc(sizeof(interpol));
     space->interp->acc = gsl_interp_accel_alloc();
-    /* allocating memory for eigensystem */
+    /* allocating eigensystem */
     space->eig = malloc(sizeof(eigen_sys));
     space->eig->val = gsl_vector_alloc(DIM);
     space->eig->vec = gsl_matrix_alloc(DIM, DIM);
@@ -87,41 +79,39 @@ Space *init_space(double *x, double *Ne, int N) {
     space->interp->spline = gsl_spline_alloc(gsl_interp_steffen, N);  /* STEFFEN */
     sqrt2_GF_NA(Ne, N);
     gsl_spline_init(space->interp->spline, x, Ne, N);
-    /* defining the parameters */
-    //double th12 = DEG_TO_RAD(THETA12),
-    //       //th23,
-    //       //d_CP,
-    //       th13;
-    ///* checking number of neutrinos and setting parameters accordingly */
-    //if (NUM_NU == 2) {
-    //    th13 /*= th23 = d_CP*/ = 0.0;
-    //}
-    //else {
-    //    th13 = DEG_TO_RAD(THETA13);// th23 = DEG_TO_RAD(THETA23); d_CP = DEG_TO_RAD(DELTACP);
-    //}
-    ///* calculating mixing matrix */
-    //double s12 = sin(th12), c12 = cos(th12),
-    //       //s23 = sin(th23), c23 = cos(th23),
-    //       s13 = sin(th13), c13 = cos(th13);
+    /* defining parameters */
+    double th12 = DEG_TO_RAD(THETA12),
+           //th23, d_CP,    /* evolution does not depend on them */
+           th13;
+    /* checking number of neutrinos and setting parameters accordingly */
+    if (NUM_NU == 2) {
+        th13 /*= th23 = d_CP*/ = 0.0;
+    }
+    else {
+        th13 = DEG_TO_RAD(THETA13);// th23 = DEG_TO_RAD(THETA23); d_CP = DEG_TO_RAD(DELTACP);
+    }
+    double s12 = sin(th12), c12 = cos(th12),
+           //s23 = sin(th23), c23 = cos(th23),
+           s13 = sin(th13), c13 = cos(th13);
+    //  /* parameters from [Casas] */
+    //  double s12 = sqrt(0.308) , c12 = sqrt(1 - s12*s12),
+    //         s13 = sqrt(0.0234), c13 = sqrt(1 - s13*s13);
     /* calculating mixing matrix */
-    double s12 = sqrt(0.308) , c12 = sqrt(1 - s12*s12),
-           s13 = sqrt(0.0234), c13 = sqrt(1 - s13*s13);
     double
     W11=c13*c13*c12*c12,  W12=c12*s12*c13*c13,  W13=c12*c13*s13,
     W21=c12*s12*c13*c13,  W22=s12*s12*c13*c13,  W23=s12*c13*s13,
     W31=c12*s13*c13    ,  W32=s12*c13*s13    ,  W33=s13*s13;
-    gsl_matrix *W = gsl_matrix_alloc(DIM, DIM); /* DIM = 3 */
-    MSET(W, 0, 0, W11);  MSET(W, 0, 1, W12);  MSET(W, 0, 2, W13);
-    MSET(W, 1, 0, W21);  MSET(W, 1, 1, W22);  MSET(W, 1, 2, W23);
-    MSET(W, 2, 0, W31);  MSET(W, 2, 1, W32);  MSET(W, 2, 2, W33);
-    space->W = W;
+    space->W = gsl_matrix_alloc(DIM, DIM); /* DIM = 3 */
+    MSET(space->W, 0, 0, W11);  MSET(space->W, 0, 1, W12);  MSET(space->W, 0, 2, W13);
+    MSET(space->W, 1, 0, W21);  MSET(space->W, 1, 1, W22);  MSET(space->W, 1, 2, W23);
+    MSET(space->W, 2, 0, W31);  MSET(space->W, 2, 1, W32);  MSET(space->W, 2, 2, W33);
     /* we have H0 = (1 / (E in MeV) ) . diag(-b, 0, a) */
-    space->H0 = gsl_matrix_alloc(DIM, DIM); gsl_matrix_set_zero(space->H0);
+    space->H0 = gsl_matrix_alloc(DIM, DIM);
+    gsl_matrix_set_zero(space->H0);
     space->a = malloc(sizeof(double)); space->b = malloc(sizeof(double));
-    //*space->a = DM2_32 * (1e-6 / 2.0) * EV_CM * R_SUN;
-    //*space->b = DM2_21 * (1e-6 / 2.0) * EV_CM * R_SUN;
-    *space->a = 4.35196e+06;
-    *space->b = 0.030554;
+    *space->a = DM2_3L * (1e-6 / 2.0) * EV_CM * R_SUN;
+    *space->b = DM2_21 * (1e-6 / 2.0) * EV_CM * R_SUN;
+    //*space->a = 4.35196e+06; *space->b = 0.030554 * *space->a;  /* from [Casas] */
     space->commH0_W = gsl_matrix_alloc(DIM, DIM);
     space->Omega2 = gsl_matrix_alloc(DIM, DIM);
     space->Omega4 = gsl_matrix_complex_alloc(DIM, DIM);
@@ -164,28 +154,29 @@ void free_space(Space *space) {
 }
 
 
-/* H0 = (1 / (E in MeV) ) . diag(-b, 0, a) */
+/* H0 = (1 / (E in MeV) ) . diag(0, b, +/- a) */
 void setH0(Space *S, double E) {
-    MSET(S->H0, 0, 0, -*S->b / E);
+    MSET(S->H0, 1, 1, *S->b / E);
     MSET(S->H0, 2, 2, MASS_ORDER == 'N' ? (*S->a / E) : (-*S->a / E));
 }
 
 
-/* apply order M2 or M4 */
+/* apply M2 or M4 */
 void step(double t, double h, int order, Space *space, function *f) {
     if (order == 2) {
-        m2(t, h, space, f);    /* Magnus 2 */
+        m2(t, h, space, f); /* Magnus 2 */
         expi_matrix_vec(space->Omega2, -h, space);  /* psi <- exp(-i Omega2 h) psi */
     }
     else {
-        m4(t, h, space, f);   /* Magnus 4 */
+        m4(t, h, space, f); /* Magnus 4 */
         expi_cmatrix_vec(space->Omega4, -h, space); /* psi <- exp(-i Omega4 h) psi */
     }
 }
 
+
 /* Omega2 matrix for Magnus Expansion of order 2 */
 void m2(double t, double h, Space *space, function *f) {
-    double f_bar = f(t + h*0.5, space->interp);   /* exponential midpoint rule */
+    double f_bar = f(t + h*0.5, space->interp); /* exponential midpoint rule */
     gsl_matrix_memcpy(space->Omega2, space->W); /* W */
     gsl_matrix_scale(space->Omega2, f_bar);     /* f_bar W */
     gsl_matrix_add(space->Omega2, space->H0);   /* H0 + f_bar W */
@@ -204,9 +195,6 @@ void m4(double t, double h, Space *space, function *f) {
                     (SQRT3 / 12.0) * (f_pls - f_min) * MGET(space->commH0_W, i, j) * h
                 )
             );
-    //printf("\n");
-    //print_cmatrix(space->Omega4);
-    //printf("\n");
 }
 
 
@@ -290,13 +278,14 @@ double ne_interp(double t, void *interpo) {  /* void pointer because this define
 }
 
 
+/* exponential profile for electron number density from [Casas] */
 double ne_expprf(double t, void *params) {
     (void) params;  /* avoid unused parameter warning */
-    return 6.5956e+04 * exp(-10.54 * t);
+    return 6.5956e+04 * exp(-10.54 * t);    /* n_e = gamma * exp(-eta*t) */
 }
 
 
-/* multiply our N_e data by sqrt(2) . G_F */
+/* multiply our N_e data by sqrt(2).G_F.N_A */
 void sqrt2_GF_NA(double *Ne, int N) {
     for (int i = 0; i < N; i++)
         Ne[i] *= M_SQRT2 * G_FxN_A;
@@ -356,7 +345,7 @@ void print_matrix(gsl_matrix *M) {
 }
 
 
-/* print matrix for debuggig */
+/* print matrix_complex for debuggig */
 void print_cmatrix(gsl_matrix_complex *M) {
     for (size_t i = 0; i < M->size1; i++)  /* OUT OF RANGE ERROR */
         for (size_t j = 0; j < M->size2; j++)
@@ -366,7 +355,7 @@ void print_cmatrix(gsl_matrix_complex *M) {
 }
 
 
-/* print matrix for debuggig */
+/* print vector_complex for debuggig */
 void print_vec(gsl_vector_complex *psi) {
     for (size_t j = 0; j < psi->size; j++)
         printf("%+.3e + %+.3e i  %c", GSL_REAL(gsl_vector_complex_get(psi, j)),
@@ -374,10 +363,44 @@ void print_vec(gsl_vector_complex *psi) {
                                       (j == psi->size-1) ? '\n' : ' ');
 }
 
+
+/* k = 0   -> min */
+/* ... lin spaced */
+/* k = N-1 -> max */
+double linspace(int k, double min, double max, int N) {
+    if (N < 2)
+        return min;
+    else {
+        if (k < 1)
+            return min;
+        else if (k > N-2)
+            return max;
+        else    /* 1 <= k <= N-2 */
+            return min + k * (max - min) / ((double) N - 1.0);
+    }
+}
+
+
+/* k = 0   -> 10.0^min_pow */
+/* ...  log10 spaced       */
+/* k = N-1 -> 10.0^max_pow */
+double logspace(int k, double min_pow, double max_pow, int N) {
+    if (N < 2)
+        return pow(10.0, min_pow);
+    else {
+        if (k < 1)
+            return pow(10.0, min_pow);
+        else if (k > N-2)
+            return pow(10.0, max_pow);
+        else    /* 1 <= k <= N-2 */
+            return pow(10.0, min_pow + k * (max_pow - min_pow) / ((double) N - 1.0));
+    }
+}
+
+
 /***************/
 /* unused code */
 /***************/
-
 ////gsl_blas_zdotc(space->psi, space->elec, &z);
 //printf("%*ld%15.5e%15.5e\n", it_width,
 //        i, ti, //gsl_blas_dznrm2(space->psi),

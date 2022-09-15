@@ -75,3 +75,5 @@ int readalloc(FILE *stream, double **x_ptr, double **y_ptr, int chunk);
 void print_matrix(gsl_matrix *M);
 void print_cmatrix(gsl_matrix_complex *M);
 void print_vec(gsl_vector_complex *psi);
+double linspace(int k, double min, double max, int N);
+double logspace(int k, double min_pow, double max_pow, int N);

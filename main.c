@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
             long num_it = lround((T_FINAL - t0) / PASSO);   /* number of iterations */
             for (long i = 0; i <= num_it; i++) {
                 t_i = i * PASSO + t0;      /* constant step size */
-                step(t_i, PASSO, 4, space, &ne_expprf); /* Magnus */
+                step(t_i, PASSO, 4, space, &ne_interp); /* Magnus */
             }
             P_ee += p_r0[r_index] * surv(space->psi, space->elec);  /* media do P_ee no ponto de producao */
         }
@@ -292,7 +292,7 @@ double ne_expprf(double t, void *params) {
 /* multiply our N_e data by sqrt(2).G_F.N_A */
 void sqrt2_GF_NA(double *Ne, int N) {
     for (int i = 0; i < N; i++)
-        Ne[i] *= M_SQRT2 * G_FxN_A;
+        Ne[i] *= M_SQRT2 * G_FxN_A * R_SUN * (1/(EV_CM*EV_CM));
 }
 
 

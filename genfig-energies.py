@@ -4,8 +4,8 @@ import numpy as np
 
 #magnus = 2
 magnus = 4
-#profile = '-interp'
-profile = ''
+profile = '-interp'
+#profile = ''
 tipo = 'log'
 #tipo = ''
 

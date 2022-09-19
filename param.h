@@ -1,5 +1,4 @@
 #define NUM_NU      (3)     /* numero de neutrinos */
-#define T_0         (0.0)   /* initial dimensionless radius */
 #define T_FINAL     (1.0)   /* final dimensionless radius */
 #define MASS_ORDER  ('N')   /* 'N' for normal, 'I' for inverted */
 

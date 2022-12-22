@@ -14,7 +14,7 @@ int main(int argc, char *argv[]) {
                             /***   READING DATA    ***/
                             /*************************/
     FILE *elecdens_file = fopen("elecdens.txt", "r");
-    FILE *distr_file = fopen("8b-distr-rough.txt", "r");
+    FILE *distr_file = fopen(argv[1], "r");
     //FILE *energy_file = fopen("8b-energy.txt", "r");
     double *x, *Ne;
     int N = readalloc(elecdens_file, &x, &Ne, 2500); /* we have 2458 lines */
@@ -29,14 +29,15 @@ int main(int argc, char *argv[]) {
                             /*************************/
                             /***        ODE        ***/
                             /*************************/
-    double energy; int n_energies = 100;    /* energia em MeV (a mais provavel eh 6.44) */
+    double energy; int n_energies = 140;    /* energia em MeV */
     for (int k = 0; k < n_energies; k++) {
         //energy = linspace(k, 0.02, 16.56, n_energies);    /* min_E = 0.02, max_E = 16.56 */
         //energy = logspace(k, -1.0, 7.0, n_energies);
-        energy = logspace(k, -1.0, 1.22, n_energies);
+        //energy = logspace(k, -1.0, 1.22, n_energies);
+        energy = logspace(k, -1.0, 2.1, n_energies);
         setH0(space, energy);   /* dividing by the energy */
         comm(space->H0, space->W, space->commH0_W); /* calculating [H0, W] */
-        double P_ee = 0.0;
+        double P_ee = 0.0;// gsl_complex z;
         for (int r_index = 0; r_index < num_r && p_r0[r_index] != 0.0; r_index++) {
             double t0 = r0[r_index], t_i;
             gsl_vector_complex_memcpy(space->psi, space->elec); /* initial condition = nu_e */
@@ -46,6 +47,8 @@ int main(int argc, char *argv[]) {
                 step(t_i, PASSO, 4, space, &ne_interp); /* Magnus */
             }
             P_ee += p_r0[r_index] * surv(space->psi, space->elec);  /* media do P_ee no ponto de producao */
+            //gsl_blas_zdotc(space->elec, space->psi, &z);
+            //P_ee += p_r0[r_index] * gsl_complex_abs2(z);
         }
         printf("%15.5e%15.5e\n", energy, P_ee);
     }

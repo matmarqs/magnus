@@ -14,15 +14,15 @@ int main(int argc, char *argv[]) {
                             /***   READING DATA    ***/
                             /*************************/
     FILE *elecdens_file = fopen("elecdens.txt", "r");
-    FILE *energy_file = fopen("8b-energy.txt", "r");
-    FILE *distr_file = fopen("8b-distr.txt", "r");
+    //FILE *distr_file = fopen("argv[1]", "r");
+    //FILE *energy_file = fopen("8b-energy.txt", "r");
     double *x, *Ne;
     int N = readalloc(elecdens_file, &x, &Ne, 2500); /* we have 2458 lines */
-    double *E, *p_E;
-    double *r0, *p_r0;
-    /*int num_E = */readalloc(energy_file, &E, &p_E, 900);   /* 844 lines */
-    /*int num_r = */readalloc(distr_file, &r0, &p_r0, 1300); /* 1226 lines */
-    fclose(elecdens_file); fclose(energy_file); fclose(distr_file);
+    //double *E, *p_E;
+    //double *r0, *p_r0;
+    ///*int num_E = */readalloc(energy_file, &E, &p_E, 900);   /* 844 lines */
+    ///*int num_r = */readalloc(distr_file, &r0, &p_r0, 1300); /* 1226 lines */
+    fclose(elecdens_file);// fclose(distr_file); fclose(energy_file);
     Space *space = init_space(x, Ne, N);
 
 
@@ -32,19 +32,25 @@ int main(int argc, char *argv[]) {
     double t0 = 0.0;
     long num_it = lround((T_FINAL - t0) / PASSO);   /* number of iterations */
     //int it_width = (int) log10(num_it) + 1;     /* variable to format iteration number */
-    double t_i, energy; int n_energies = 200;    /* energia em MeV (a mais provavel eh 6.44) */
+    double t_i, energy; int n_energies = 1; /* energia em MeV (a mais provavel eh 6.44) */
     for (int k = 0; k < n_energies; k++) {
-        //energy = linspace(k, 0.02, 16.56, n_energies);    /* min_E = 0.02, max_E = 16.56 */
-        //energy = logspace(k, -1.0, 7.0, n_energies);
-        energy = logspace(k, -1.0, 1.22, n_energies);
+        energy = logspace(k, -1.0, -1.0, n_energies);
         setH0(space, energy);   /* dividing by the energy */
         comm(space->H0, space->W, space->commH0_W); /* calculating [H0, W] */
         gsl_vector_complex_memcpy(space->psi, space->elec); /* initial condition = nu_e */
         for (long i = 0; i <= num_it; i++) {
             t_i = i * PASSO + t0;       /* constant step size */
-            step(t_i, PASSO, 4, space, &ne_expprf); /* Magnus */
+            step(t_i, PASSO, 4, space, &ne_vacuum); /* Magnus */
+            ////gsl_blas_zdotc(space->psi, space->elec, &z);
+            //printf("%*ld%15.5e%15.5e\n", it_width,
+            //        i, ti, //gsl_blas_dznrm2(space->psi),
+            //        ///*amp2(space->psi, 0),*/ GSL_REAL(VGET(space->psi, 0)), GSL_IMAG(VGET(space->psi, 0)),   /* psi_1 */
+            //        ///*amp2(space->psi, 1),*/ GSL_REAL(VGET(space->psi, 1)), GSL_IMAG(VGET(space->psi, 1)),   /* psi_2 */
+            //        ///*amp2(space->psi, 2) */ GSL_REAL(VGET(space->psi, 2)), GSL_IMAG(VGET(space->psi, 2)),   /* psi_3 */
+            //        //gsl_complex_abs2(z)
+            //);
         }
-        printf("%15.5e%15.5e\n", energy, surv(space->psi, space->elec));
+        //printf("%15.5e%15.5e\n", energy, surv(space->psi, space->elec));
     }
 
 
@@ -55,8 +61,8 @@ int main(int argc, char *argv[]) {
     free_space(space);
     /* data */
     free(x); free(Ne);
-    free(E); free(p_E);
-    free(r0); free(p_r0);
+    //free(E); free(p_E);
+    //free(r0); free(p_r0);
     return 0;
 
 }
@@ -286,10 +292,17 @@ double ne_expprf(double t, void *params) {
 }
 
 
+/* just returns zero, because it is vacuum */
+double ne_vacuum(double t, void *params) {
+    (void) params;  /* avoid unused parameter warning */
+    return 0.0;
+}
+
+
 /* multiply our N_e data by sqrt(2).G_F.N_A */
 void sqrt2_GF_NA(double *Ne, int N) {
     for (int i = 0; i < N; i++)
-        Ne[i] *= M_SQRT2 * G_FxN_A;
+        Ne[i] *= M_SQRT2 * G_FxN_A * R_SUN * (1/(EV_CM*EV_CM));
 }
 
 
